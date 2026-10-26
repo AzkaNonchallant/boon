@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme.dart';
 import '../../core/state/app_state.dart';
+import '../../core/protocol/boon_message.dart';
 import '../../shared/utils/relative_time.dart';
 import '../../shared/widgets/components.dart';
 import '../../shared/widgets/neu.dart';
@@ -186,6 +189,118 @@ class PhoneBuddyPage extends StatelessWidget {
       builder: (_) => QuickActionDialog(state: state, sendLink: sendLink),
     );
   }
+
+  void _openScreenMirror(BuildContext context, AppState state, String peerId) {
+    unawaited(state.requestScreenShare(peerId));
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => Consumer<AppState>(
+        builder: (context, current, _) => AlertDialog(
+          backgroundColor: BoonColors.panelBase,
+          title: Row(
+            children: [
+              const Expanded(
+                child: Text('Phone screen', style: BoonTypography.sectionTitle),
+              ),
+              IconButton(
+                tooltip: 'Close screen sharing',
+                onPressed: () => Navigator.pop(dialogContext),
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 760,
+            height: 520,
+            child: current.screenFrame == null
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (current.screenError == null)
+                          const CircularProgressIndicator()
+                        else
+                          const Icon(
+                            Icons.error_outline_rounded,
+                            size: 34,
+                            color: BoonColors.textFaint,
+                          ),
+                        const SizedBox(height: 16),
+                        Text(
+                          current.screenError ??
+                              current.screenStage ??
+                              'Approve screen sharing on your phone.',
+                          textAlign: TextAlign.center,
+                          style: BoonTypography.subtitle,
+                        ),
+                      ],
+                    ),
+                  )
+                : Column(
+                    children: [
+                      Expanded(
+                        child: Center(
+                          child: AspectRatio(
+                            aspectRatio:
+                                current.screenFrameWidth > 0 &&
+                                    current.screenFrameHeight > 0
+                                ? current.screenFrameWidth /
+                                      current.screenFrameHeight
+                                : 9 / 19,
+                            child: LayoutBuilder(
+                              builder: (context, constraints) =>
+                                  GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTapUp: (details) => state.sendScreenTap(
+                                      peerId,
+                                      (details.localPosition.dx /
+                                              constraints.maxWidth)
+                                          .clamp(0.0, 1.0),
+                                      (details.localPosition.dy /
+                                              constraints.maxHeight)
+                                          .clamp(0.0, 1.0),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Image.memory(
+                                        current.screenFrame!,
+                                        fit: BoxFit.fill,
+                                        gaplessPlayback: true,
+                                      ),
+                                    ),
+                                  ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Tap control requires Boon Accessibility to be enabled on the phone.',
+                              style: BoonTypography.tiny,
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => state.link?.sendToPeer(
+                              peerId,
+                              BoonMessage.tCompanionAction,
+                              {'action': 'open_accessibility_settings'},
+                            ),
+                            icon: const Icon(Icons.touch_app_rounded, size: 17),
+                            label: const Text('Enable control'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ),
+    ).then((_) => state.stopScreenShare(peerId));
+  }
 }
 
 class _PhoneStatusCard extends StatelessWidget {
@@ -255,29 +370,50 @@ class _PhoneStatusCard extends StatelessWidget {
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [BoonColors.accent, BoonColors.accentDeep],
-              ),
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                  color: BoonColors.shadowDark,
-                  offset: const Offset(4, 5),
-                  blurRadius: 10,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              NeuButton(
+                label: 'View screen',
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
                 ),
-              ],
-            ),
-            child: Text(
-              device.battery == null ? 'Battery —' : '${device.battery}%',
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
+                onTap: () => PhoneBuddyPage()._openScreenMirror(
+                  context,
+                  state,
+                  device.id,
+                ),
               ),
-            ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [BoonColors.accent, BoonColors.accentDeep],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: BoonColors.shadowDark,
+                      offset: const Offset(4, 5),
+                      blurRadius: 10,
+                    ),
+                  ],
+                ),
+                child: Text(
+                  device.battery == null ? 'Battery —' : '${device.battery}%',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

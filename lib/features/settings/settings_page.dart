@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../app/theme.dart';
 import '../../app/window.dart';
 import '../../core/state/app_state.dart';
+import '../../services/companion/companion_bridge.dart';
 import '../../shared/widgets/neu.dart';
 
 /// Settings + Boon Link: identity, discovery, pairing, trusted devices
@@ -309,6 +310,28 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
           ),
+          if (CompanionBridge.available) ...[
+            const SizedBox(height: 10),
+            _SectionCard(
+              title: 'Remote screen control',
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Enable Boon in Android Accessibility settings to allow taps from your paired desktop. This permission is sensitive and remains under your control.',
+                      style: BoonTypography.subtitle,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  NeuButton(
+                    label: 'Open settings',
+                    onTap: () =>
+                        unawaited(CompanionBridge.openAccessibilitySettings()),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           _SectionCard(
             title: 'Pair by IP',

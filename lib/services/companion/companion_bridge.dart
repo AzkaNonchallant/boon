@@ -34,8 +34,8 @@ class CompanionBridge {
   static Stream<Map<String, dynamic>> get events {
     if (!available) return Stream<Map<String, dynamic>>.empty();
     return _events ??= _eventChannel.receiveBroadcastStream().map(
-          (event) => (event as Map).cast<String, dynamic>(),
-        );
+      (event) => (event as Map).cast<String, dynamic>(),
+    );
   }
 
   /// Whether the system currently lets Boon read notifications/media.
@@ -74,13 +74,63 @@ class CompanionBridge {
   static Future<bool> applyMediaAction(String action) async {
     if (!available) return false;
     try {
-      return await _channel.invokeMethod<bool>(
-            'applyMediaAction',
-            {'action': action},
-          ) ??
+      return await _channel.invokeMethod<bool>('applyMediaAction', {
+            'action': action,
+          }) ??
           false;
     } catch (e) {
       debugPrint('CompanionBridge.applyMediaAction failed: $e');
+      return false;
+    }
+  }
+
+  /// Shows Android's mandatory screen-capture confirmation before sharing.
+  static Future<bool> requestScreenShare() async {
+    if (!available) return false;
+    try {
+      return await _channel.invokeMethod<bool>('requestScreenShare') ?? false;
+    } catch (e) {
+      debugPrint('CompanionBridge.requestScreenShare failed: $e');
+      return false;
+    }
+  }
+
+  static Future<void> stopScreenShare() async {
+    if (!available) return;
+    try {
+      await _channel.invokeMethod('stopScreenShare');
+    } catch (e) {
+      debugPrint('CompanionBridge.stopScreenShare failed: $e');
+    }
+  }
+
+  static Future<bool> isAccessibilityEnabled() async {
+    if (!available) return false;
+    try {
+      return await _channel.invokeMethod<bool>('isAccessibilityEnabled') ??
+          false;
+    } catch (e) {
+      debugPrint('CompanionBridge.isAccessibilityEnabled failed: $e');
+      return false;
+    }
+  }
+
+  static Future<void> openAccessibilitySettings() async {
+    if (!available) return;
+    try {
+      await _channel.invokeMethod('openAccessibilitySettings');
+    } catch (e) {
+      debugPrint('CompanionBridge.openAccessibilitySettings failed: $e');
+    }
+  }
+
+  static Future<bool> tapScreen(double x, double y) async {
+    if (!available) return false;
+    try {
+      return await _channel.invokeMethod<bool>('screenTap', {'x': x, 'y': y}) ??
+          false;
+    } catch (e) {
+      debugPrint('CompanionBridge.tapScreen failed: $e');
       return false;
     }
   }

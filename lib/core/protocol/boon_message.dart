@@ -37,6 +37,7 @@ class BoonMessage {
   static const tSendLink = 'send_link';
   static const tNotification = 'notification';
   static const tCompanionAction = 'companion_action';
+  static const tScreenFrame = 'screen_frame';
 
   // File transfer stream
   static const tTransferRequest = 'transfer_request';

@@ -75,6 +75,14 @@ class AppState extends ChangeNotifier {
   final Map<String, String> notificationAppNames = {};
   final Map<String, bool> notificationAppEnabled = {};
   MediaState media = MediaState.empty;
+  Uint8List? screenFrame;
+  String? screenFramePeerId;
+  String? screenViewerId;
+  String? screenError;
+  String? screenStage;
+  bool _sentFirstScreenFrame = false;
+  int screenFrameWidth = 0;
+  int screenFrameHeight = 0;
 
   // ---- Activity -----------------------------------------------------
   final List<ActivityEvent> activities = [];
@@ -101,6 +109,11 @@ class AppState extends ChangeNotifier {
   StreamSubscription? _discoverySub;
   StreamSubscription? _companionSub;
   Timer? _deviceStatusTimer;
+  Timer? _screenFrameTimeout;
+  bool _screenFrameSending = false;
+  bool _loggedScreenFrameEvent = false;
+  bool _loggedScreenFrameQueue = false;
+  bool _loggedScreenFrameReceived = false;
 
   Map<String, PairedDevice> get trustedDevices => link?.trusted.all ?? {};
 
@@ -241,6 +254,8 @@ class AppState extends ChangeNotifier {
       // notifications/media from this phone right now.
       if (companionSupported)
         'notificationListener': notificationListenerActive,
+      if (companionSupported)
+        'screenControl': await CompanionBridge.isAccessibilityEnabled(),
     };
     await link?.broadcastStatus(payload);
   }
@@ -306,6 +321,38 @@ class AppState extends ChangeNotifier {
 
       case 'media':
         unawaited(_mirrorMedia(event));
+
+      case 'screen_frame':
+        if (!_loggedScreenFrameEvent) {
+          _loggedScreenFrameEvent = true;
+          debugPrint(
+            'Phone Buddy: native frame event received (${(event['data'] as String?)?.length ?? 0} chars; viewer=${screenViewerId != null})',
+          );
+        }
+        screenError = null;
+        unawaited(_mirrorScreenFrame(event));
+
+      case 'screen_started':
+        _sendScreenStatus('screen_share_started');
+
+      case 'screen_error':
+        _sendScreenStatus('screen_share_error', {
+          'message':
+              event['message'] as String? ??
+              'Android could not start screen capture.',
+        });
+
+      case 'screen_stopped':
+        final viewer = screenViewerId;
+        screenViewerId = null;
+        if (viewer != null) {
+          unawaited(
+            link?.sendToPeer(viewer, BoonMessage.tCompanionAction, {
+              'action': 'screen_share_stopped',
+            }),
+          );
+        }
+        notifyListeners();
     }
   }
 
@@ -342,6 +389,46 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _mirrorScreenFrame(Map<String, dynamic> event) async {
+    final viewer = screenViewerId;
+    final data = event['data'] as String?;
+    if (viewer == null || data == null || data.isEmpty || _screenFrameSending) {
+      return;
+    }
+    _screenFrameSending = true;
+    try {
+      await link?.sendToPeer(viewer, BoonMessage.tScreenFrame, {
+        'data': data,
+        'width': event['width'],
+        'height': event['height'],
+      });
+      if (!_loggedScreenFrameQueue) {
+        debugPrint('Phone Buddy: screen frame queued to paired peer');
+        _loggedScreenFrameQueue = true;
+      }
+      if (!_sentFirstScreenFrame) {
+        _sentFirstScreenFrame = true;
+        _sendScreenStatus('screen_first_frame_sent');
+      }
+    } finally {
+      _screenFrameSending = false;
+    }
+  }
+
+  void _sendScreenStatus(
+    String action, [
+    Map<String, dynamic> extra = const {},
+  ]) {
+    final viewer = screenViewerId;
+    if (viewer == null) return;
+    unawaited(
+      link?.sendToPeer(viewer, BoonMessage.tCompanionAction, {
+        'action': action,
+        ...extra,
+      }),
+    );
+  }
+
   /// Public wrapper used by the phone shell: sends an immediate self-status
   /// broadcast when the app resumes (so the desktop sees fresh Last Seen /
   /// battery before the next 30s tick). Avoids protected warnings.
@@ -356,6 +443,7 @@ class AppState extends ChangeNotifier {
     _discoverySub?.cancel();
     _companionSub?.cancel();
     _deviceStatusTimer?.cancel();
+    _screenFrameTimeout?.cancel();
     unawaited(AndroidCompanion.releaseMulticast());
     unawaited(AndroidCompanion.stop());
     unawaited(clipboard.stop());
@@ -458,6 +546,7 @@ class AppState extends ChangeNotifier {
           device: device,
           online: true,
           notificationsReady: payload['notificationListener'] == true,
+          screenControl: payload['screenControl'] == true,
         );
         notifyListeners();
 
@@ -494,6 +583,65 @@ class AppState extends ChangeNotifier {
             CompanionBridge.available) {
           notificationsEnabled = payload['enabled'] == true;
           notifyListeners();
+        } else if (action == 'start_screen_share' &&
+            CompanionBridge.available) {
+          screenViewerId = peerId;
+          _loggedScreenFrameEvent = false;
+          _loggedScreenFrameQueue = false;
+          unawaited(CompanionBridge.requestScreenShare());
+        } else if (action == 'stop_screen_share' && CompanionBridge.available) {
+          screenViewerId = null;
+          unawaited(CompanionBridge.stopScreenShare());
+        } else if (action == 'screen_tap' && CompanionBridge.available) {
+          unawaited(
+            CompanionBridge.tapScreen(
+              (payload['x'] as num?)?.toDouble() ?? -1,
+              (payload['y'] as num?)?.toDouble() ?? -1,
+            ),
+          );
+        } else if (action == 'open_accessibility_settings' &&
+            CompanionBridge.available) {
+          unawaited(CompanionBridge.openAccessibilitySettings());
+        } else if (action == 'screen_share_stopped') {
+          screenFrame = null;
+          screenFramePeerId = null;
+          screenFrameWidth = 0;
+          screenFrameHeight = 0;
+          notifyListeners();
+        } else if (action == 'screen_share_started') {
+          screenError = null;
+          screenStage = 'Capture started; waiting for first frame…';
+          notifyListeners();
+        } else if (action == 'screen_first_frame_sent') {
+          screenStage = 'Phone is sending the screen…';
+          notifyListeners();
+        } else if (action == 'screen_share_error') {
+          screenError =
+              payload['message'] as String? ?? 'Screen capture failed.';
+          notifyListeners();
+        }
+
+      case BoonMessage.tScreenFrame:
+        if (peerId != screenFramePeerId) return;
+        try {
+          final data = payload['data'] as String?;
+          if (data == null || data.isEmpty) return;
+          if (!_loggedScreenFrameReceived) {
+            _loggedScreenFrameReceived = true;
+            debugPrint(
+              'Phone Buddy: desktop received screen frame (${data.length} chars)',
+            );
+          }
+          screenFrame = base64Decode(data);
+          _screenFrameTimeout?.cancel();
+          screenError = null;
+          screenStage = null;
+          screenFramePeerId = peerId;
+          screenFrameWidth = (payload['width'] as num?)?.toInt() ?? 0;
+          screenFrameHeight = (payload['height'] as num?)?.toInt() ?? 0;
+          notifyListeners();
+        } catch (_) {
+          // Ignore malformed screen frames from the authenticated peer.
         }
 
       case BoonMessage.tNotification:
@@ -807,6 +955,55 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> requestScreenShare(String peerId) async {
+    _screenFrameTimeout?.cancel();
+    screenFrame = null;
+    screenError = null;
+    screenStage = 'Waiting for the phone…';
+    _sentFirstScreenFrame = false;
+    _loggedScreenFrameReceived = false;
+    screenFramePeerId = peerId;
+    screenFrameWidth = 0;
+    screenFrameHeight = 0;
+    await link?.sendToPeer(peerId, BoonMessage.tCompanionAction, {
+      'action': 'start_screen_share',
+    });
+    _screenFrameTimeout = Timer(const Duration(seconds: 15), () {
+      if (screenFrame == null &&
+          screenFramePeerId == peerId &&
+          screenError == null) {
+        screenError = 'No screen frames received. Keep Boon open on the phone and try again.';
+        screenStage = null;
+        notifyListeners();
+      }
+    });
+    notifyListeners();
+  }
+
+  Future<void> stopScreenShare(String peerId) async {
+    _screenFrameTimeout?.cancel();
+    await link?.sendToPeer(peerId, BoonMessage.tCompanionAction, {
+      'action': 'stop_screen_share',
+    });
+    screenFrame = null;
+    screenError = null;
+    screenStage = null;
+    _sentFirstScreenFrame = false;
+    screenFramePeerId = null;
+    screenFrameWidth = 0;
+    screenFrameHeight = 0;
+    notifyListeners();
+  }
+
+  Future<void> sendScreenTap(String peerId, double x, double y) async {
+    if (statusByDevice[peerId]?.screenControl != true) return;
+    await link?.sendToPeer(peerId, BoonMessage.tCompanionAction, {
+      'action': 'screen_tap',
+      'x': x.clamp(0.0, 1.0),
+      'y': y.clamp(0.0, 1.0),
+    });
+  }
+
   Future<void> pairAt(String address, int? port) async {
     await link?.pairWith(address, port);
   }
@@ -991,6 +1188,7 @@ class DeviceStatusData {
     required this.device,
     required this.online,
     this.notificationsReady = false,
+    this.screenControl = false,
   });
 
   final BoonDevice device;
@@ -999,6 +1197,9 @@ class DeviceStatusData {
   /// Remote phone granted notification/media access (from its status
   /// broadcast). Always false for desktop peers, which have no listener.
   final bool notificationsReady;
+
+  /// Android Accessibility control service is currently connected.
+  final bool screenControl;
 }
 
 /// Routes `BoonLink.sendToPeer` calls (used by TransferService) to the

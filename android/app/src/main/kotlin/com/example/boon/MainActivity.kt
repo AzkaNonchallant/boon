@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.content.ContentValues
 import android.net.Uri
 import android.net.wifi.WifiManager
+import android.media.projection.MediaProjectionManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Environment
@@ -32,6 +33,8 @@ import java.io.File
 /// - "boon/companion/events": stream of mirrored notifications + media
 ///   snapshots from BoonNotificationListener.
 class MainActivity : FlutterActivity() {
+
+    private val screenCaptureRequestCode = 7151
 
     private var multicastLock: WifiManager.MulticastLock? = null
 
@@ -117,6 +120,25 @@ class MainActivity : FlutterActivity() {
                         val action = call.argument<String>("action") ?: ""
                         result.success(BoonNotificationListener.applyMediaAction(action))
                     }
+                    "requestScreenShare" -> {
+                        val manager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                        startActivityForResult(manager.createScreenCaptureIntent(), screenCaptureRequestCode)
+                        result.success(true)
+                    }
+                    "stopScreenShare" -> {
+                        stopService(Intent(this, BoonScreenCaptureService::class.java))
+                        result.success(true)
+                    }
+                    "isAccessibilityEnabled" -> result.success(BoonControlAccessibilityService.isEnabled())
+                    "openAccessibilitySettings" -> {
+                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        result.success(true)
+                    }
+                    "screenTap" -> {
+                        val x = call.argument<Double>("x")?.toFloat() ?: -1f
+                        val y = call.argument<Double>("y")?.toFloat() ?: -1f
+                        result.success(BoonControlAccessibilityService.tap(x, y))
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -156,6 +178,28 @@ class MainActivity : FlutterActivity() {
         unregisterBatteryReceiver()
         releaseMulticastLock()
         super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    @Deprecated("Deprecated in Android, retained for MediaProjection consent result")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != screenCaptureRequestCode) return
+        if (resultCode != RESULT_OK || data == null) {
+            BoonNotificationListener.eventSink?.invoke(
+                mapOf("kind" to "screen_error", "message" to "Screen sharing was cancelled on the phone."),
+            )
+            return
+        }
+        val intent = Intent(this, BoonScreenCaptureService::class.java)
+            .putExtra(BoonScreenCaptureService.EXTRA_RESULT_CODE, resultCode)
+            .putExtra(BoonScreenCaptureService.EXTRA_RESULT_DATA, data)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+        } catch (error: Exception) {
+            BoonNotificationListener.eventSink?.invoke(
+                mapOf("kind" to "screen_error", "message" to (error.message ?: "Android blocked screen sharing.")),
+            )
+        }
     }
 
     // ---- Battery ------------------------------------------------------

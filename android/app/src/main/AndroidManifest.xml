@@ -2,6 +2,7 @@
     <!-- Boon link + discovery run entirely on the local network. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- UDP broadcast/multicast discovery packets. -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <!-- Foreground service keeps the link alive while the app is backgrounded

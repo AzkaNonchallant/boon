@@ -42,7 +42,11 @@ class DeviceIdentity {
     return identity;
   }
 
-  static String _defaultType() => Platform.isAndroid ? 'phone' : 'desktop';
+  static String _defaultType() => Platform.isAndroid
+      ? 'phone'
+      : Platform.isIOS
+      ? 'tablet'
+      : 'desktop';
 
   /// Android reports 'localhost' for localHostname; prefer the device
   /// model so peers see "Pixel 8", not "localhost".
@@ -68,9 +72,8 @@ class DeviceIdentity {
   }
 
   static Future<Directory> supportDir() async {
-    if (Platform.isAndroid) {
-      // No HOME environment on Android; path_provider resolves the app's
-      // private storage (getApplicationSupportDirectory).
+    if (Platform.isAndroid || Platform.isIOS) {
+      // Mobile OSes keep app data in a sandbox with no stable HOME directory.
       final dir = await getApplicationSupportDirectory();
       return Directory('${dir.path}${Platform.pathSeparator}boon_identity')
         ..create(recursive: true);

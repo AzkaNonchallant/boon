@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -54,7 +55,7 @@ class _PhoneShellState extends State<PhoneShell> with WidgetsBindingObserver {
     // system log with denials.
     if (state == AppLifecycleState.resumed && wasBackgrounded) {
       final appState = context.read<AppState>();
-      unawaited(appState.syncNow(quiet: true));
+      if (Platform.isAndroid) unawaited(appState.syncNow(quiet: true));
       unawaited(appState.refreshCompanionStatus());
       unawaited(appState.pushSelfStatus());
     }
@@ -330,15 +331,21 @@ class _Header extends StatelessWidget {
               children: [
                 const Text('BOON LINK', style: BoonTypography.sectionTitle),
                 Text(
-                  // Real link only — demo mode must not claim a desktop link.
                   (state.link?.hasLinkedPeer ?? false)
-                      ? 'Linked to your desktop'
-                      : 'Same Wi-Fi as your desktop',
+                      ? 'Connected to Boon devices'
+                      : 'Same Wi-Fi as your other device',
                   style: BoonTypography.tiny,
                 ),
               ],
             ),
           ),
+          if (Platform.isIOS)
+            IconButton(
+              tooltip: 'Sync clipboard to paired devices',
+              onPressed: () => state.syncNow(),
+              icon: const Icon(Icons.content_paste_go_rounded,
+                  size: 20, color: BoonColors.accentDeep),
+            ),
           if (state.link?.hasLinkedPeer ?? false)
             const Icon(Icons.wifi_rounded, size: 20, color: BoonColors.online)
           else

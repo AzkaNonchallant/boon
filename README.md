@@ -1,8 +1,8 @@
 # Boon — Personal Device Bridge
 
 Boon adalah aplikasi Flutter local-first untuk menghubungkan desktop Windows,
-Android, dan perangkat lain di jaringan lokal. Tidak ada cloud server atau VPS
-yang dibutuhkan.
+Android, iPad/iOS, dan perangkat lain secara langsung di jaringan lokal. Tidak
+ada cloud server atau VPS yang dibutuhkan.
 
 ## Status implementasi
 
@@ -22,12 +22,16 @@ yang dibutuhkan.
 - Windows frameless/always-on-top widget window melalui native runner.
 - Android companion untuk battery, Notification Listener, MediaSession, dan
   foreground link service.
+- iPad/iOS dapat pair langsung dengan Android atau perangkat Boon lain di LAN;
+  desktop tidak perlu menjadi server.
 - Phone Buddy punya pause forwarding dan filter aplikasi notifikasi per app.
 
 ### Batasan yang disengaja
 
 - Clipboard Android background dibatasi oleh OS; sinkronisasi foreground/manual
   tetap diperlukan pada kondisi tertentu.
+- iPad/iOS perlu tetap membuka Boon agar koneksi LAN aktif. Sinkron clipboard
+  dari iPad dilakukan manual supaya Boon tidak memicu izin pasteboard berulang.
 - Media control hanya aktif bila Android memiliki media session aktif.
 - Notification mirroring membutuhkan izin Notification Access di Android.
 - Boon Island drag-and-drop penuh masih menjadi fase berikutnya.

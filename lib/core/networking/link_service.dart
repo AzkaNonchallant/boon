@@ -612,7 +612,7 @@ class LinkService implements BoonLink {
 
   @override
   Future<void> sendClipboardText(String text) async {
-    for (final session in _sessions.values) {
+    for (final session in List.of(_sessions.values)) {
       await _sendSecure(session, BoonMessage.tClipboardText, {'text': text});
     }
   }
@@ -625,7 +625,7 @@ class LinkService implements BoonLink {
   }
 
   Future<void> broadcastStatus(Map<String, dynamic> status) async {
-    for (final session in _sessions.values) {
+    for (final session in List.of(_sessions.values)) {
       await _sendSecure(session, BoonMessage.tDeviceStatus, status);
     }
   }
@@ -633,7 +633,7 @@ class LinkService implements BoonLink {
   /// Fan-out for application messages that every paired peer may consume
   /// (mirrored notifications, media snapshots).
   Future<void> broadcastApp(String type, Map<String, dynamic> payload) async {
-    for (final session in _sessions.values) {
+    for (final session in List.of(_sessions.values)) {
       await _sendSecure(session, type, payload);
     }
   }

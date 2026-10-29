@@ -7,10 +7,7 @@ import 'package:boon/core/networking/link_service.dart';
 import 'package:boon/core/protocol/boon_message.dart';
 import 'package:boon/core/security/device_identity.dart';
 
-Future<T> waitFor<T>(
-  bool Function() check,
-  T Function() extract,
-) async {
+Future<T> waitFor<T>(bool Function() check, T Function() extract) async {
   final deadline = DateTime.now().add(const Duration(seconds: 8));
   while (DateTime.now().isBefore(deadline)) {
     if (check()) return extract();
@@ -20,10 +17,11 @@ Future<T> waitFor<T>(
 }
 
 void main() {
-  test('two nodes pair and exchange encrypted clipboard text', () async {
+  test('one node pairs with multiple peers and broadcasts clipboard text', () async {
     // Isolated store paths so reruns / other suites cannot see prior pairings.
     final dirA = await Directory.systemTemp.createTemp('boon_a');
     final dirB = await Directory.systemTemp.createTemp('boon_b');
+    final dirC = await Directory.systemTemp.createTemp('boon_c');
     final nodeA = LinkService(
       _fakeIdentity('A', 'node-a'),
       linkPortOverride: 45560,
@@ -34,17 +32,27 @@ void main() {
       linkPortOverride: 45561,
       storePath: '${dirB.path}/trusted.json',
     );
+    final nodeC = LinkService(
+      _fakeIdentity('C', 'node-c'),
+      linkPortOverride: 45562,
+      storePath: '${dirC.path}/trusted.json',
+    );
     await nodeA.start();
     await nodeB.start();
+    await nodeC.start();
 
     final appA = <SecureAppMessage>[];
     final appB = <SecureAppMessage>[];
+    final appC = <SecureAppMessage>[];
     nodeA.appData.listen(appA.add);
     nodeB.appData.listen(appB.add);
+    nodeC.appData.listen(appC.add);
 
     final incomingB = <PairingEvent>[];
+    final incomingCEvents = <PairingEvent>[];
     final outgoingA = <PairingEvent>[];
     nodeB.pairingEvents.listen(incomingB.add);
+    nodeC.pairingEvents.listen(incomingCEvents.add);
     nodeA.pairingEvents.listen(outgoingA.add);
 
     // A initiates pairing towards B.
@@ -72,13 +80,40 @@ void main() {
       () => nodeA.trustedDevices.length,
     );
 
-    // Encrypted application data flows both directions.
+    // Pair a second peer to prove one node can hold and broadcast to several
+    // independent trusted sessions at once.
+    unawaited(nodeA.pairWith('127.0.0.1', 45562));
+    final incomingC = await waitFor(
+      () => incomingCEvents.any((e) => e.stage == PairingEvent.incoming),
+      () => incomingCEvents.firstWhere((e) => e.stage == PairingEvent.incoming),
+    );
+    await nodeC.acceptIncomingPairing(incomingC.peerId);
+    final codeC = await waitFor(
+      () => outgoingA.any(
+        (e) => e.stage == PairingEvent.code && e.peerId == 'C',
+      ),
+      () => outgoingA.firstWhere(
+        (e) => e.stage == PairingEvent.code && e.peerId == 'C',
+      ),
+    );
+    await nodeA.confirmOutgoingPairing(codeC.peerId);
+    await waitFor(
+      () => nodeA.trustedDevices.length == 2 && nodeC.trustedDevices.isNotEmpty,
+      () => nodeA.trustedDevices.length,
+    );
+
+    // Encrypted clipboard fan-out reaches both paired peers.
     await nodeA.sendClipboardText('halo dari A');
     var clipB = await waitFor(
       () => appB.any((m) => m.type == BoonMessage.tClipboardText),
       () => appB.firstWhere((m) => m.type == BoonMessage.tClipboardText),
     );
     expect(clipB.payload['text'], 'halo dari A');
+    final clipC = await waitFor(
+      () => appC.any((m) => m.type == BoonMessage.tClipboardText),
+      () => appC.firstWhere((m) => m.type == BoonMessage.tClipboardText),
+    );
+    expect(clipC.payload['text'], 'halo dari A');
 
     await nodeB.sendClipboardText('halo dari B');
     await waitFor(
@@ -88,8 +123,10 @@ void main() {
 
     await nodeA.stop();
     await nodeB.stop();
+    await nodeC.stop();
     await dirA.delete(recursive: true);
     await dirB.delete(recursive: true);
+    await dirC.delete(recursive: true);
   }, timeout: const Timeout(Duration(seconds: 30)));
 }
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 
@@ -21,6 +22,9 @@ class ClipboardService {
 
   void start({Duration interval = const Duration(milliseconds: 1200)}) {
     _timer?.cancel();
+    // iOS prompts when an app reads the pasteboard; use the explicit sync
+    // button instead of polling it in the background.
+    if (Platform.isIOS) return;
     _timer = Timer.periodic(interval, (_) => _poll());
   }
 

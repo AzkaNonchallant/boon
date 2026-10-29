@@ -24,9 +24,11 @@ class BoonApp extends StatelessWidget {
         title: 'Boon',
         debugShowCheckedModeBanner: false,
         theme: buildBoonTheme(),
-        // Android runs the phone-flavored companion; desktop keeps the
-        // full unified panel shell unchanged.
-        home: Platform.isAndroid ? const PhoneShell() : const HomeShell(),
+        // Android and iOS use the compact link/pairing shell; desktop keeps
+        // the full unified panel.
+        home: Platform.isAndroid || Platform.isIOS
+            ? const PhoneShell()
+            : const HomeShell(),
       ),
     );
   }

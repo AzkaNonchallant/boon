@@ -89,9 +89,8 @@ void main() {
     );
     await nodeC.acceptIncomingPairing(incomingC.peerId);
     final codeC = await waitFor(
-      () => outgoingA.any(
-        (e) => e.stage == PairingEvent.code && e.peerId == 'C',
-      ),
+      () =>
+          outgoingA.any((e) => e.stage == PairingEvent.code && e.peerId == 'C'),
       () => outgoingA.firstWhere(
         (e) => e.stage == PairingEvent.code && e.peerId == 'C',
       ),

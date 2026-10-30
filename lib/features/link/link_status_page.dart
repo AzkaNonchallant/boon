@@ -28,7 +28,7 @@ class _LinkStatusPageState extends State<LinkStatusPage> {
   AndroidBattery? _battery;
   Timer? _batteryTimer;
   final _addressCtl = TextEditingController(text: '192.168.');
-  final _portCtl =     TextEditingController(text: '45022');
+  final _portCtl = TextEditingController(text: '45022');
 
   @override
   void initState() {
@@ -62,7 +62,11 @@ class _LinkStatusPageState extends State<LinkStatusPage> {
     final address = _addressCtl.text.trim();
     final port = int.tryParse(_portCtl.text.trim());
     if (address.isEmpty) {
-      state.addActivity(ActivityKind.info, 'Pair by address', 'Enter the desktop IP first.');
+      state.addActivity(
+        ActivityKind.info,
+        'Pair by address',
+        'Enter the desktop IP first.',
+      );
       state.requestUiUpdate();
       return;
     }
@@ -87,7 +91,33 @@ class _LinkStatusPageState extends State<LinkStatusPage> {
             id: identity?.id,
             battery: _battery,
           ),
-          if (state.companionSupported && !state.notificationListenerActive) ...[
+          if (state.pairingError != null || state.pairingStatus != null) ...[
+            const SizedBox(height: 14),
+            NeuCard(
+              contentPadding: const EdgeInsets.all(14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    state.pairingError != null
+                        ? Icons.error_outline_rounded
+                        : Icons.sync_rounded,
+                    size: 20,
+                    color: BoonColors.textDim,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      state.pairingError ?? state.pairingStatus!,
+                      style: BoonTypography.subtitle,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (state.companionSupported &&
+              !state.notificationListenerActive) ...[
             const SizedBox(height: 14),
             NeuCard(
               contentPadding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
@@ -96,10 +126,16 @@ class _LinkStatusPageState extends State<LinkStatusPage> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.notifications_active_rounded,
-                          size: 20, color: BoonColors.accentDeep),
+                      const Icon(
+                        Icons.notifications_active_rounded,
+                        size: 20,
+                        color: BoonColors.accentDeep,
+                      ),
                       const SizedBox(width: 8),
-                      const Text('Notification access', style: BoonTypography.cardTitle),
+                      const Text(
+                        'Notification access',
+                        style: BoonTypography.cardTitle,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -115,7 +151,10 @@ class _LinkStatusPageState extends State<LinkStatusPage> {
                     child: NeuButton(
                       label: 'Allow access',
                       onTap: state.openNotificationListenerSettings,
-                      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 22,
+                        vertical: 10,
+                      ),
                     ),
                   ),
                 ],
@@ -128,11 +167,16 @@ class _LinkStatusPageState extends State<LinkStatusPage> {
               contentPadding: const EdgeInsets.all(14),
               child: Row(
                 children: [
-                  const Icon(Icons.wifi_off_rounded, size: 20, color: BoonColors.textDim),
+                  const Icon(
+                    Icons.wifi_off_rounded,
+                    size: 20,
+                    color: BoonColors.textDim,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      link?.discoveryErrorText ?? 'Discovery unavailable — pair by address.',
+                      link?.discoveryErrorText ??
+                          'Discovery unavailable — pair by address.',
                       style: BoonTypography.subtitle,
                     ),
                   ),
@@ -141,7 +185,10 @@ class _LinkStatusPageState extends State<LinkStatusPage> {
             ),
           const Padding(
             padding: EdgeInsets.fromLTRB(8, 10, 8, 2),
-            child: Text('Discovered Devices', style: BoonTypography.sectionTitle),
+            child: Text(
+              'Discovered Devices',
+              style: BoonTypography.sectionTitle,
+            ),
           ),
           if (discovered.isEmpty)
             NeuCard(
@@ -151,10 +198,16 @@ class _LinkStatusPageState extends State<LinkStatusPage> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.radar_rounded, size: 22, color: BoonColors.accentDeep),
+                      const Icon(
+                        Icons.radar_rounded,
+                        size: 22,
+                        color: BoonColors.accentDeep,
+                      ),
                       const SizedBox(width: 8),
-                      const Text('Scanning this Wi-Fi…',
-                          style: BoonTypography.cardTitle),
+                      const Text(
+                        'Scanning this Wi-Fi…',
+                        style: BoonTypography.cardTitle,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -167,11 +220,13 @@ class _LinkStatusPageState extends State<LinkStatusPage> {
               ),
             )
           else
-            ...discovered.map((device) => _DiscoveredCard(
-                  device: device,
-                  trusted: state.trustedDevices.containsKey(device.id),
-                  onPair: () => _pairDiscovered(state, device),
-                )),
+            ...discovered.map(
+              (device) => _DiscoveredCard(
+                device: device,
+                trusted: state.trustedDevices.containsKey(device.id),
+                onPair: () => _pairDiscovered(state, device),
+              ),
+            ),
           const Padding(
             padding: EdgeInsets.fromLTRB(8, 18, 8, 2),
             child: Text('Pair by Address', style: BoonTypography.sectionTitle),
@@ -201,7 +256,10 @@ class _LinkStatusPageState extends State<LinkStatusPage> {
                   child: NeuButton(
                     label: 'Pair',
                     onTap: () => _pairManual(state),
-                    padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 11),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 26,
+                      vertical: 11,
+                    ),
                   ),
                 ),
               ],
@@ -210,30 +268,57 @@ class _LinkStatusPageState extends State<LinkStatusPage> {
           if (state.trustedDevices.isNotEmpty) ...[
             const Padding(
               padding: EdgeInsets.fromLTRB(8, 18, 8, 2),
-              child: Text('Trusted Devices', style: BoonTypography.sectionTitle),
+              child: Text(
+                'Trusted Devices',
+                style: BoonTypography.sectionTitle,
+              ),
             ),
             ...state.trustedDevices.values.map(
               (p) => NeuCard(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 child: Row(
                   children: [
-                    const Icon(Icons.verified_user_rounded, size: 20, color: BoonColors.accentDeep),
+                    const Icon(
+                      Icons.verified_user_rounded,
+                      size: 20,
+                      color: BoonColors.accentDeep,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700, color: BoonColors.navy)),
-                          Text('ID ${p.id.substring(0, 8)}…', style: BoonTypography.tiny),
+                          Text(
+                            p.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: BoonColors.navy,
+                            ),
+                          ),
+                          Text(
+                            'ID ${p.id.substring(0, 8)}…',
+                            style: BoonTypography.tiny,
+                          ),
                         ],
                       ),
                     ),
                     IconButton(
                       tooltip: 'Forget',
-                      icon: const Icon(Icons.link_off_rounded, size: 18, color: BoonColors.textFaint),
+                      icon: const Icon(
+                        Icons.link_off_rounded,
+                        size: 18,
+                        color: BoonColors.textFaint,
+                      ),
                       onPressed: () {
                         state.forgetDevice(p.id);
-                        state.addActivity(ActivityKind.connection, 'Device forgotten', p.name);
+                        state.addActivity(
+                          ActivityKind.connection,
+                          'Device forgotten',
+                          p.name,
+                        );
                         state.requestUiUpdate();
                       },
                     ),
@@ -261,7 +346,11 @@ class _ThisDeviceCard extends StatelessWidget {
       contentPadding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
       child: Row(
         children: [
-          const AppIconCircle(icon: Icons.smartphone_rounded, size: 48, iconSize: 22),
+          const AppIconCircle(
+            icon: Icons.smartphone_rounded,
+            size: 48,
+            iconSize: 22,
+          ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -275,13 +364,19 @@ class _ThisDeviceCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  id == null ? 'Generating identity…' : 'ID ${id!.substring(0, 8)}… • phone',
+                  id == null
+                      ? 'Generating identity…'
+                      : 'ID ${id!.substring(0, 8)}… • phone',
                   style: BoonTypography.tiny,
                 ),
               ],
             ),
           ),
-          const ConnectionStatus(connected: true, compact: true, label: 'Online'),
+          const ConnectionStatus(
+            connected: true,
+            compact: true,
+            label: 'Online',
+          ),
           const SizedBox(width: 10),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -305,8 +400,8 @@ class _ThisDeviceCard extends StatelessWidget {
                   battery == null
                       ? Icons.battery_unknown_rounded
                       : battery!.charging
-                          ? Icons.bolt_rounded
-                          : Icons.battery_std_rounded,
+                      ? Icons.bolt_rounded
+                      : Icons.battery_std_rounded,
                   size: 16,
                   color: Colors.white,
                 ),
@@ -359,7 +454,10 @@ class _DiscoveredCard extends StatelessWidget {
               children: [
                 Text(
                   device.name,
-                  style: const TextStyle(fontWeight: FontWeight.w700, color: BoonColors.navy),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: BoonColors.navy,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -371,7 +469,11 @@ class _DiscoveredCard extends StatelessWidget {
             ),
           ),
           if (trusted)
-            const Icon(Icons.verified_rounded, size: 20, color: BoonColors.online)
+            const Icon(
+              Icons.verified_rounded,
+              size: 20,
+              color: BoonColors.online,
+            )
           else
             NeuButton(
               label: 'Pair',

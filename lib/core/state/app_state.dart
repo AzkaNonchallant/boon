@@ -99,6 +99,8 @@ class AppState extends ChangeNotifier {
 
   // ---- Pairing prompts surfaced to the shell ------------------------
   final Map<String, ({BoonDevice device, String code})> incomingPairings = {};
+  String? pairingError;
+  String? pairingStatus;
   final Map<String, ({String code, BoonDevice device})> outgoingCodes = {};
   List<BoonDevice> discovered = [];
 
@@ -714,6 +716,7 @@ class AppState extends ChangeNotifier {
           code: event.verificationCode ?? '',
         );
       case PairingEvent.code:
+        pairingStatus = null;
         outgoingCodes[event.peerId] = (
           code: event.verificationCode ?? '',
           device: BoonDevice(
@@ -723,6 +726,8 @@ class AppState extends ChangeNotifier {
           ),
         );
       case PairingEvent.complete:
+        pairingStatus = null;
+        pairingError = null;
         incomingPairings.remove(event.peerId);
         outgoingCodes.remove(event.peerId);
         addActivity(
@@ -733,15 +738,19 @@ class AppState extends ChangeNotifier {
       case PairingEvent.rejected:
         incomingPairings.remove(event.peerId);
         outgoingCodes.remove(event.peerId);
+        if (event.error != null) {
+          pairingStatus = null;
+          pairingError = event.error;
+          addActivity(ActivityKind.info, 'Pairing request', event.error!);
+        }
       case PairingEvent.outgoingWaiting:
-        break;
+        pairingStatus =
+            'Permintaan pairing terkirim. Cek dan setujui di desktop.';
       case PairingEvent.failed:
+        pairingStatus = null;
         outgoingCodes.remove(event.peerId);
-        addActivity(
-          ActivityKind.info,
-          'Pairing failed',
-          'Could not reach ${event.peerName}',
-        );
+        pairingError = event.error ?? 'Pairing dengan ${event.peerName} gagal.';
+        addActivity(ActivityKind.info, 'Pairing failed', pairingError!);
     }
     notifyListeners();
   }
@@ -1005,6 +1014,9 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> pairAt(String address, int? port) async {
+    pairingError = null;
+    pairingStatus = 'Menghubungkan ke $address…';
+    notifyListeners();
     await link?.pairWith(address, port);
   }
 

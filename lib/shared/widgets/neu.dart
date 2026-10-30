@@ -16,8 +16,10 @@ class NeuCard extends StatelessWidget {
   });
 
   final Widget child;
+
   /// Spacing between the content and the card walls.
   final EdgeInsetsGeometry contentPadding;
+
   /// Outer spacing so soft shadows are not clipped.
   final EdgeInsetsGeometry margin;
   final double radius;
@@ -32,9 +34,7 @@ class NeuCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: color ?? BoonColors.panelBase,
         borderRadius: BorderRadius.circular(radius),
-        border: border == null
-            ? null
-            : Border.all(color: border!, width: 1.5),
+        border: border == null ? null : Border.all(color: border!, width: 1.5),
         boxShadow: BoonShadows.raised(),
       ),
       child: Padding(padding: contentPadding, child: child),
@@ -81,14 +81,20 @@ class NeuInput extends StatelessWidget {
         hintStyle: const TextStyle(color: BoonColors.textFaint, fontSize: 13),
         filled: true,
         fillColor: BoonColors.panelBottom,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 12,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: BoonColors.accentDeep, width: 1.4),
+          borderSide: const BorderSide(
+            color: BoonColors.accentDeep,
+            width: 1.4,
+          ),
         ),
       ),
     );
@@ -119,7 +125,9 @@ class NeuButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           color: accent ? null : BoonColors.panelBase,
           gradient: accent
-              ? const LinearGradient(colors: [BoonColors.accent, BoonColors.accentDeep])
+              ? const LinearGradient(
+                  colors: [BoonColors.accent, BoonColors.accentDeep],
+                )
               : null,
           boxShadow: [
             BoxShadow(
@@ -176,7 +184,11 @@ class NeuIconButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: BoonColors.panelBase,
           shape: BoxShape.circle,
-          boxShadow: BoonShadows.raised(blur: 10, darkOffset: const Offset(4, 4), lightOffset: const Offset(-4, -4)),
+          boxShadow: BoonShadows.raised(
+            blur: 10,
+            darkOffset: const Offset(4, 4),
+            lightOffset: const Offset(-4, -4),
+          ),
         ),
         child: InkWell(
           onTap: onPressed,
@@ -230,7 +242,11 @@ class NeuSquareButton extends StatelessWidget {
               onTap: onPressed,
               borderRadius: BorderRadius.circular(16),
               child: Center(
-                child: Icon(icon, size: iconSize, color: BoonColors.accentSoft),
+                child: Icon(
+                  icon,
+                  size: iconSize,
+                  color: BoonColors.iconNeutral,
+                ),
               ),
             ),
           ),
@@ -246,8 +262,8 @@ class NeuToggle extends StatelessWidget {
     super.key,
     required this.value,
     required this.onChanged,
-    this.trackWidth = 78,
-    this.trackHeight = 40,
+    this.trackWidth = 58,
+    this.trackHeight = 32,
   });
 
   final bool value;
@@ -257,77 +273,41 @@ class NeuToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final knobSize = trackHeight - 10;
-    return GestureDetector(
-      onTap: () => onChanged(!value),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        width: trackWidth,
-        height: trackHeight,
-        decoration: BoxDecoration(
-          color: BoonColors.panelBase,
-          borderRadius: BorderRadius.circular(trackHeight / 2),
-          boxShadow: value
-              ? [
+    final knobSize = trackHeight - 6;
+    return Semantics(
+      button: true,
+      toggled: value,
+      child: GestureDetector(
+        onTap: () => onChanged(!value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          width: trackWidth,
+          height: trackHeight,
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: value ? BoonColors.accentDeep : BoonColors.panelBottom,
+            borderRadius: BorderRadius.circular(trackHeight / 2),
+          ),
+          child: AnimatedAlign(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+            child: Container(
+              width: knobSize,
+              height: knobSize,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
                   BoxShadow(
-                    color: BoonColors.shadowDark,
-                    offset: const Offset(-4, -4),
-                    blurRadius: 10,
+                    color: Colors.black.withValues(alpha: 0.2),
+                    offset: const Offset(0, 1),
+                    blurRadius: 3,
                   ),
-                  BoxShadow(
-                    color: BoonColors.shadowLight,
-                    offset: const Offset(4, 4),
-                    blurRadius: 10,
-                  ),
-                ]
-              : BoonShadows.raised(
-                  blur: 10,
-                  darkOffset: const Offset(4, 4),
-                  lightOffset: const Offset(-4, -4),
-                ),
-        ),
-        child: Stack(
-          children: [
-            AnimatedAlign(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              alignment: value ? Alignment.centerLeft : Alignment.centerRight,
-              child: Container(
-                width: trackWidth * 0.62,
-                margin: const EdgeInsets.symmetric(horizontal: 6),
-                decoration: BoxDecoration(
-                  gradient: value
-                      ? const LinearGradient(
-                          colors: [BoonColors.accentSoft, BoonColors.accent],
-                        )
-                      : null,
-                  color: value ? null : BoonColors.panelBottom,
-                  borderRadius: BorderRadius.circular(trackHeight / 2),
-                ),
+                ],
               ),
             ),
-            AnimatedAlign(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-              child: Container(
-                width: knobSize,
-                height: knobSize,
-                margin: const EdgeInsets.all(5),
-                decoration: BoxDecoration(
-                  color: BoonColors.panelTop,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: BoonColors.shadowDark,
-                      offset: const Offset(2, 2),
-                      blurRadius: 6,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -418,9 +398,13 @@ class NeuPill extends StatelessWidget {
       padding: padding,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        color: gradient ? null : (filled ? BoonColors.accent : BoonColors.panelBase),
+        color: gradient
+            ? null
+            : (filled ? BoonColors.accent : BoonColors.panelBase),
         gradient: gradient
-            ? const LinearGradient(colors: [BoonColors.accentSoft, BoonColors.accent])
+            ? const LinearGradient(
+                colors: [BoonColors.accentSoft, BoonColors.accent],
+              )
             : null,
         boxShadow: [
           BoxShadow(

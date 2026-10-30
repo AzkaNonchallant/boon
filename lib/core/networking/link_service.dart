@@ -43,6 +43,7 @@ class PairingEvent {
     required this.peerName,
     required this.stage,
     this.verificationCode,
+    this.error,
   });
 
   static const incoming = 'incoming'; // remote asked to pair; show prompt
@@ -56,6 +57,7 @@ class PairingEvent {
   final String peerName;
   final String stage;
   final String? verificationCode;
+  final String? error;
 }
 
 /// Decrypted application-layer message from a peer.
@@ -72,7 +74,7 @@ class SecureAppMessage {
 /// there is no central server.
 class LinkService implements BoonLink {
   LinkService(this.identity, {this.linkPortOverride, String? storePath})
-      : trusted = TrustedDeviceStore(storePath: storePath);
+    : trusted = TrustedDeviceStore(storePath: storePath);
 
   final DeviceIdentity identity;
 
@@ -132,7 +134,10 @@ class LinkService implements BoonLink {
     _discovery.peers.listen(_onDiscovered);
     _server = await ServerSocket.bind(InternetAddress.anyIPv4, _linkPort);
     _server!.listen(_onInboundConnection);
-    _keepAliveTimer = Timer.periodic(const Duration(seconds: 20), (_) => _keepAlive());
+    _keepAliveTimer = Timer.periodic(
+      const Duration(seconds: 20),
+      (_) => _keepAlive(),
+    );
   }
 
   /// Half-open TCP sockets never notice the peer disappeared: no FIN/error
@@ -143,10 +148,15 @@ class LinkService implements BoonLink {
     for (final session in List.of(_sessions.values)) {
       if (_sessions[session.info.id] != session) continue;
       // Never reap while a pairing handshake is mid-flight.
-      final pairingInFlight = session.pendingOutgoingNonce != null ||
+      final pairingInFlight =
+          session.pendingOutgoingNonce != null ||
           session.pendingIncomingNonce != null;
       if (pairingInFlight) continue;
-      session.conn.sendJson({'type': BoonMessage.tPing, 'from': identity.id, 'payload': const {}});
+      session.conn.sendJson({
+        'type': BoonMessage.tPing,
+        'from': identity.id,
+        'payload': const {},
+      });
       final idle = now.difference(session.lastActivity);
       final limit = session.info.id.startsWith('pending:')
           ? const Duration(seconds: 30)
@@ -190,7 +200,8 @@ class LinkService implements BoonLink {
       }
       if (_sessions.containsKey(d.id)) continue;
       final last = _connectAttempts[d.id];
-      if (last != null && DateTime.now().difference(last) < const Duration(seconds: 5)) {
+      if (last != null &&
+          DateTime.now().difference(last) < const Duration(seconds: 5)) {
         continue;
       }
       _connectAttempts[d.id] = DateTime.now();
@@ -248,14 +259,23 @@ class LinkService implements BoonLink {
         'from': identity.id,
         'payload': {'nonce': nonce},
       });
-      _pairingStream.add(PairingEvent(
-        peerId: session.info.id,
-        peerName: session.info.name,
-        stage: PairingEvent.outgoingWaiting,
-      ));
+      _pairingStream.add(
+        PairingEvent(
+          peerId: session.info.id,
+          peerName: session.info.name,
+          stage: PairingEvent.outgoingWaiting,
+        ),
+      );
     } catch (e) {
       _pairingStream.add(
-        PairingEvent(peerId: 'unknown', peerName: address, stage: PairingEvent.failed),
+        PairingEvent(
+          peerId: 'unknown',
+          peerName: address,
+          stage: PairingEvent.failed,
+          error:
+              'Tidak bisa terhubung ke $address:${port ?? _linkPort}. '
+              'Pastikan Boon di desktop aktif dan kedua perangkat berada di jaringan yang sama.\n$e',
+        ),
       );
     }
   }
@@ -264,7 +284,9 @@ class LinkService implements BoonLink {
     final conn = PeerConnection.fromSocket(socket);
     conn.onLine = (line) {
       try {
-        final msg = BoonMessage.fromJson(jsonDecode(line) as Map<String, dynamic>);
+        final msg = BoonMessage.fromJson(
+          jsonDecode(line) as Map<String, dynamic>,
+        );
         if (msg.type == BoonMessage.tHello) {
           final device = BoonDevice.fromJson(
             (msg.payload['identity'] ?? msg.payload).cast<String, dynamic>(),
@@ -332,7 +354,9 @@ class LinkService implements BoonLink {
     session.conn.onLine = (line) {
       session.lastActivity = DateTime.now();
       try {
-        final msg = BoonMessage.fromJson(jsonDecode(line) as Map<String, dynamic>);
+        final msg = BoonMessage.fromJson(
+          jsonDecode(line) as Map<String, dynamic>,
+        );
         unawaited(_onFrame(session, msg));
       } catch (_) {}
     };
@@ -345,11 +369,11 @@ class LinkService implements BoonLink {
   }
 
   Map<String, dynamic> _identityJson() => {
-        'id': identity.id,
-        'name': identity.name,
-        'type': identity.type,
-        'caps': const ['clipboard', 'file_transfer'],
-      };
+    'id': identity.id,
+    'name': identity.name,
+    'type': identity.type,
+    'caps': const ['clipboard', 'file_transfer'],
+  };
 
   // ------------------------------------------------------------------
   // Pairing state machine
@@ -359,7 +383,11 @@ class LinkService implements BoonLink {
     _adoptRealId(session, msg);
     switch (msg.type) {
       case BoonMessage.tPing:
-        session.conn.sendJson({'type': BoonMessage.tPong, 'from': identity.id, 'payload': const {}});
+        session.conn.sendJson({
+          'type': BoonMessage.tPong,
+          'from': identity.id,
+          'payload': const {},
+        });
 
       case BoonMessage.tPong:
         break; // keep-alive only; lastActivity already refreshed
@@ -367,15 +395,20 @@ class LinkService implements BoonLink {
       case BoonMessage.tHello:
         // Update peer info (e.g. the initiator previously only knew an IP).
         final isNewName = session.info.name == session.info.address;
-        session.info.name = (msg.payload['name'] as String?) ?? session.info.name;
-        session.info.type = BoonDevice.typeFrom(msg.payload['type'] as String? ?? 'unknown');
+        session.info.name =
+            (msg.payload['name'] as String?) ?? session.info.name;
+        session.info.type = BoonDevice.typeFrom(
+          msg.payload['type'] as String? ?? 'unknown',
+        );
         final storeEntry = trusted.all[session.info.id];
         if (storeEntry != null && isNewName) {
-          trusted.put(PairedDevice(
-            id: session.info.id,
-            name: session.info.name,
-            keyHex: storeEntry.keyHex,
-          ));
+          trusted.put(
+            PairedDevice(
+              id: session.info.id,
+              name: session.info.name,
+              keyHex: storeEntry.keyHex,
+            ),
+          );
         }
         // Outbound/auto-reconnect of an already-trusted peer: the inbound
         // side restores its key on hello, this side must do the same —
@@ -389,7 +422,26 @@ class LinkService implements BoonLink {
         _notifySessions();
 
       case BoonMessage.tPairRequest:
-        if (session.paired) return;
+        if (session.paired) {
+          final reason =
+              'Desktop masih menyimpan kunci pairing lama untuk '
+              '${session.info.name}. Buka Settings > Trusted Devices di desktop, '
+              'hapus perangkat ini (Forget), lalu pair ulang dari HP.';
+          session.conn.sendJson({
+            'type': BoonMessage.tPairReject,
+            'from': identity.id,
+            'payload': {'reason': reason},
+          });
+          _pairingStream.add(
+            PairingEvent(
+              peerId: session.info.id,
+              peerName: session.info.name,
+              stage: PairingEvent.rejected,
+              error: reason,
+            ),
+          );
+          return;
+        }
         final nonce = msg.payload['nonce'] as String? ?? '';
         session.pendingIncomingNonce = nonce;
         final sessionNonce = _randomNonce();
@@ -401,50 +453,63 @@ class LinkService implements BoonLink {
           idB: session.info.id,
         );
         session.pendingIncomingCode = code;
-        _pairingStream.add(PairingEvent(
-          peerId: session.info.id,
-          peerName: session.info.name,
-          stage: PairingEvent.incoming,
-          verificationCode: code,
-        ));
+        _pairingStream.add(
+          PairingEvent(
+            peerId: session.info.id,
+            peerName: session.info.name,
+            stage: PairingEvent.incoming,
+            verificationCode: code,
+          ),
+        );
 
       case BoonMessage.tPairAccept:
         if (session.paired || session.pendingOutgoingNonce == null) return;
         final nonceB = msg.payload['nonce'] as String? ?? '';
         final halfB = msg.payload['half'] as String? ?? '';
         session.pendingIncomingCode = LinkCrypto.verificationCode(
-          material: utf8.encode([session.pendingOutgoingNonce!, nonceB].join('|')),
+          material: utf8.encode(
+            [session.pendingOutgoingNonce!, nonceB].join('|'),
+          ),
           idA: identity.id,
           idB: session.info.id,
         );
         session.pendingIncomingHalf = halfB;
-        _pairingStream.add(PairingEvent(
-          peerId: session.info.id,
-          peerName: session.info.name,
-          stage: PairingEvent.code,
-          verificationCode: session.pendingIncomingCode,
-        ));
+        _pairingStream.add(
+          PairingEvent(
+            peerId: session.info.id,
+            peerName: session.info.name,
+            stage: PairingEvent.code,
+            verificationCode: session.pendingIncomingCode,
+          ),
+        );
 
       case BoonMessage.tPairConfirm:
         if (session.paired || session.pendingIncomingHalf == null) return;
         final halfA = msg.payload['half'] as String? ?? '';
-        session.key = LinkCrypto.sessionKeyFromHalves(session.pendingIncomingHalf!, halfA);
-        trusted.put(PairedDevice(
-          id: session.info.id,
-          name: session.info.name,
-          keyHex: _keyToHex(session.key!),
-        ));
+        session.key = LinkCrypto.sessionKeyFromHalves(
+          session.pendingIncomingHalf!,
+          halfA,
+        );
+        trusted.put(
+          PairedDevice(
+            id: session.info.id,
+            name: session.info.name,
+            keyHex: _keyToHex(session.key!),
+          ),
+        );
         _clearPending(session);
         session.conn.sendJson({
           'type': BoonMessage.tPairComplete,
           'from': identity.id,
           'payload': const {},
         });
-        _pairingStream.add(PairingEvent(
-          peerId: session.info.id,
-          peerName: session.info.name,
-          stage: PairingEvent.complete,
-        ));
+        _pairingStream.add(
+          PairingEvent(
+            peerId: session.info.id,
+            peerName: session.info.name,
+            stage: PairingEvent.complete,
+          ),
+        );
         _notifySessions();
 
       case BoonMessage.tPairComplete:
@@ -453,25 +518,32 @@ class LinkService implements BoonLink {
           session.pendingOutgoingHalf!,
           session.pendingIncomingHalf!,
         );
-        trusted.put(PairedDevice(
-          id: session.info.id,
-          name: session.info.name,
-          keyHex: _keyToHex(session.key!),
-        ));
+        trusted.put(
+          PairedDevice(
+            id: session.info.id,
+            name: session.info.name,
+            keyHex: _keyToHex(session.key!),
+          ),
+        );
         _clearPending(session);
-        _pairingStream.add(PairingEvent(
-          peerId: session.info.id,
-          peerName: session.info.name,
-          stage: PairingEvent.complete,
-        ));
+        _pairingStream.add(
+          PairingEvent(
+            peerId: session.info.id,
+            peerName: session.info.name,
+            stage: PairingEvent.complete,
+          ),
+        );
         _notifySessions();
 
       case BoonMessage.tPairReject:
-        _pairingStream.add(PairingEvent(
-          peerId: session.info.id,
-          peerName: session.info.name,
-          stage: PairingEvent.rejected,
-        ));
+        _pairingStream.add(
+          PairingEvent(
+            peerId: session.info.id,
+            peerName: session.info.name,
+            stage: PairingEvent.rejected,
+            error: msg.payload['reason'] as String?,
+          ),
+        );
         await session.conn.close();
         _sessions.remove(session.info.id);
         _notifySessions();
@@ -486,7 +558,11 @@ class LinkService implements BoonLink {
         if (decrypted == null || type == null) return;
         if (!_appDataStream.isClosed) {
           _appDataStream.add(
-            SecureAppMessage(session.info.id, type, decrypted['payload'] ?? const {}),
+            SecureAppMessage(
+              session.info.id,
+              type,
+              decrypted['payload'] ?? const {},
+            ),
           );
         }
     }
@@ -499,19 +575,20 @@ class LinkService implements BoonLink {
   void _adoptRealId(LinkSession session, BoonMessage msg) {
     final from = msg.from;
     if (from.isEmpty || from == session.info.id) return;
-    if (!session.info.id.startsWith('pending:') && session.info.id.startsWith('node-')) {
+    if (!session.info.id.startsWith('pending:') &&
+        session.info.id.startsWith('node-')) {
       return;
     }
     if (!session.info.id.startsWith('pending:')) return;
     _sessions.remove(session.info.id);
     session.info.id = from;
     final store = trusted.all[from];
-    if (store != null && store.name != session.info.name && session.info.name != session.info.address) {
-      trusted.put(PairedDevice(
-        id: from,
-        name: session.info.name,
-        keyHex: store.keyHex,
-      ));
+    if (store != null &&
+        store.name != session.info.name &&
+        session.info.name != session.info.address) {
+      trusted.put(
+        PairedDevice(id: from, name: session.info.name, keyHex: store.keyHex),
+      );
     }
     _sessions[from] = session;
   }
@@ -559,18 +636,21 @@ class LinkService implements BoonLink {
   Future<void> confirmOutgoingPairing(String peerId) async {
     final session = _sessions[peerId];
     if (session == null || session.paired) return;
-    if (session.pendingIncomingHalf == null || session.pendingOutgoingHalf == null) {
+    if (session.pendingIncomingHalf == null ||
+        session.pendingOutgoingHalf == null) {
       return;
     }
     final key = LinkCrypto.sessionKeyFromHalves(
       session.pendingOutgoingHalf!,
       session.pendingIncomingHalf!,
     );
-    trusted.put(PairedDevice(
-      id: session.info.id,
-      name: session.info.name,
-      keyHex: _keyToHex(key),
-    ));
+    trusted.put(
+      PairedDevice(
+        id: session.info.id,
+        name: session.info.name,
+        keyHex: _keyToHex(key),
+      ),
+    );
     session.key = key;
     session.conn.sendJson({
       'type': BoonMessage.tPairConfirm,
@@ -578,11 +658,13 @@ class LinkService implements BoonLink {
       'payload': {'half': session.pendingOutgoingHalf},
     });
     _clearPending(session);
-    _pairingStream.add(PairingEvent(
-      peerId: peerId,
-      peerName: session.info.name,
-      stage: PairingEvent.complete,
-    ));
+    _pairingStream.add(
+      PairingEvent(
+        peerId: peerId,
+        peerName: session.info.name,
+        stage: PairingEvent.complete,
+      ),
+    );
     _notifySessions();
   }
 
@@ -600,9 +682,16 @@ class LinkService implements BoonLink {
   // Secure application messages
   // ------------------------------------------------------------------
 
-  Future<void> _sendSecure(LinkSession session, String type, Map<String, dynamic> payload) async {
+  Future<void> _sendSecure(
+    LinkSession session,
+    String type,
+    Map<String, dynamic> payload,
+  ) async {
     if (!session.paired || session.key == null) return;
-    final sealed = await LinkCrypto.encrypt(session.key!, {'type': type, 'payload': payload});
+    final sealed = await LinkCrypto.encrypt(session.key!, {
+      'type': type,
+      'payload': payload,
+    });
     session.conn.sendJson({
       'type': BoonMessage.tSecure,
       'from': identity.id,
@@ -618,7 +707,11 @@ class LinkService implements BoonLink {
   }
 
   @override
-  Future<void> sendToPeer(String peerId, String type, Map<String, dynamic> payload) async {
+  Future<void> sendToPeer(
+    String peerId,
+    String type,
+    Map<String, dynamic> payload,
+  ) async {
     final session = _sessions[peerId];
     if (session == null) return;
     await _sendSecure(session, type, payload);

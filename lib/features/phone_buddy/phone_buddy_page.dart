@@ -9,7 +9,6 @@ import '../../core/protocol/boon_message.dart';
 import '../../shared/utils/relative_time.dart';
 import '../../shared/widgets/components.dart';
 import '../../shared/widgets/neu.dart';
-import '../../shared/widgets/quick_action_dialog.dart';
 
 /// Phone Buddy page — follows ui/phonebuddy.png.
 class PhoneBuddyPage extends StatelessWidget {
@@ -85,10 +84,10 @@ class PhoneBuddyPage extends StatelessWidget {
   List<Widget> _actionsRow(BuildContext context, AppState state) {
     final device = state.primaryDevice!;
     return [
-      Expanded(flex: 40, child: _NotificationSettingsCard(state: state)),
+      Expanded(flex: 52, child: _NotificationSettingsCard(state: state)),
       const SizedBox(width: 10),
       Expanded(
-        flex: 34,
+        flex: 48,
         child: MediaPlayerCard(
           title: state.media.title ?? 'No Media',
           artist: state.media.artist ?? device.name,
@@ -108,95 +107,18 @@ class PhoneBuddyPage extends StatelessWidget {
           },
         ),
       ),
-      const SizedBox(width: 10),
-      Expanded(
-        flex: 26,
-        child: LayoutBuilder(
-          builder: (context, c) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  flex: 40,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: NeuSquareButton(
-                          icon: Icons.link_rounded,
-                          iconSize: 22,
-                          size: null,
-                          expanded: true,
-                          onPressed: () =>
-                              _openAction(context, state, sendLink: true),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: NeuSquareButton(
-                          icon: Icons.chat_rounded,
-                          iconSize: 20,
-                          size: null,
-                          expanded: true,
-                          onPressed: () =>
-                              _openAction(context, state, sendLink: false),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Expanded(
-                  flex: 40,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: NeuSquareButton(
-                          icon: Icons.task_alt_rounded,
-                          iconSize: 22,
-                          size: null,
-                          expanded: true,
-                          onPressed: state.syncNow,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: NeuSquareButton(
-                          icon: Icons.phonelink_erase_rounded,
-                          iconSize: 20,
-                          size: null,
-                          expanded: true,
-                          onPressed: null,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
     ];
-  }
-
-  void _openAction(
-    BuildContext context,
-    AppState state, {
-    required bool sendLink,
-  }) {
-    showDialog<void>(
-      context: context,
-      builder: (_) => QuickActionDialog(state: state, sendLink: sendLink),
-    );
   }
 
   void _openScreenMirror(BuildContext context, AppState state, String peerId) {
     unawaited(state.requestScreenShare(peerId));
+    final screenSize = MediaQuery.sizeOf(context);
     showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => Consumer<AppState>(
         builder: (context, current, _) => AlertDialog(
+          insetPadding: const EdgeInsets.all(12),
           backgroundColor: BoonColors.panelBase,
           title: Row(
             children: [
@@ -211,8 +133,8 @@ class PhoneBuddyPage extends StatelessWidget {
             ],
           ),
           content: SizedBox(
-            width: 760,
-            height: 520,
+            width: screenSize.width * .96,
+            height: screenSize.height * .88,
             child: current.screenFrame == null
                 ? Center(
                     child: Column(
